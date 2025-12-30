@@ -1,4 +1,5 @@
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 import os
 import asyncio
 import logging
@@ -13,9 +14,10 @@ class TelegramService:
     def __init__(self):
         self.api_id = settings.TELEGRAM_API_ID
         self.api_hash = settings.TELEGRAM_API_HASH
+        self.session_string = settings.TELEGRAM_SESSION_STRING
         self.client = None
         
-        # Ensure session directory exists
+        # Ensure session directory exists if we fallback to file
         os.makedirs("sessions", exist_ok=True)
 
     async def start(self):
@@ -23,18 +25,24 @@ class TelegramService:
             logger.warning("Telegram API credentials not found. Skipping Telegram client start.")
             return
 
-        self.client = TelegramClient('sessions/bot_session', self.api_id, self.api_hash)
+        if self.session_string:
+            logger.info("Initializing Telegram client with StringSession.")
+            session = StringSession(self.session_string)
+        else:
+            logger.info("Initializing Telegram client with FileSession.")
+            session = 'sessions/bot_session'
+
+        self.client = TelegramClient(session, self.api_id, self.api_hash)
 
         # Register the event handler
         self.client.add_event_handler(handle_new_message, events.NewMessage(incoming=True))
 
         # Start the client
-        # In a real deployment, we might need to handle authentication differently
-        # e.g., using a bot token or a pre-existing session file.
-        # For user accounts, interactive login is tricky in headless environments.
-        # Assuming the session file 'sessions/bot_session.session' is valid or we can interactive login once.
-        await self.client.start()
-        logger.info("Telegram client started and listening for messages!")
+        try:
+            await self.client.start()
+            logger.info("Telegram client started and listening for messages!")
+        except Exception as e:
+            logger.error(f"Failed to start Telegram client: {e}")
 
     async def stop(self):
         if self.client:
