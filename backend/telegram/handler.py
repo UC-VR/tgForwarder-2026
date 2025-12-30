@@ -1,7 +1,7 @@
 from telethon import events
 from backend.services.rule_engine import rule_engine
 from backend.database import get_session
-from backend.models import Log
+from backend.models import Log, DeliveryMethod
 import logging
 
 # Configure logging
@@ -38,7 +38,8 @@ async def handle_new_message(event):
             # 2. Process actions
             for rule in matching_rules:
                 destination = rule.destination
-                logger.info(f"Rule '{rule.name}' matched. Forwarding to {destination}")
+                delivery_method = rule.delivery_method
+                logger.info(f"Rule '{rule.name}' matched. {delivery_method.capitalize()} to {destination}")
                 
                 try:
                     # Prepare destination entity (int if numeric string)
@@ -46,20 +47,24 @@ async def handle_new_message(event):
                     if destination.lstrip('-').isdigit():
                         dest_entity = int(destination)
                     
-                    # Use forward_messages to preserve media/metadata
-                    await event.client.forward_messages(dest_entity, event.message)
+                    if delivery_method == DeliveryMethod.COPY.value:
+                         # Send a copy of the message (new message with same content)
+                         await event.client.send_message(dest_entity, event.message)
+                    else:
+                        # Use forward_messages to preserve media/metadata
+                        await event.client.forward_messages(dest_entity, event.message)
                     
                     # Log success
                     log_entry = Log(
                         rule_id=rule.id,
                         source_message_id=message_id,
                         status="forwarded",
-                        details=f"Forwarded to {destination}"
+                        details=f"{delivery_method.capitalize()} to {destination}"
                     )
                     session.add(log_entry)
                     
                 except Exception as e:
-                    logger.error(f"Failed to forward to {destination}: {e}")
+                    logger.error(f"Failed to process rule {rule.id} to {destination}: {e}")
                     log_entry = Log(
                         rule_id=rule.id,
                         source_message_id=message_id,

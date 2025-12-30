@@ -1,7 +1,13 @@
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 import os
 import asyncio
+import logging
 from backend.config import settings
+from backend.telegram.handler import handle_new_message
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class TelegramService:
     def __init__(self):
@@ -14,21 +20,30 @@ class TelegramService:
 
     async def start(self):
         if not self.api_id or not self.api_hash:
-            print("Telegram API credentials not found. Skipping Telegram client start.")
+            logger.warning("Telegram API credentials not found. Skipping Telegram client start.")
             return
 
         self.client = TelegramClient('sessions/bot_session', self.api_id, self.api_hash)
+
+        # Register the event handler
+        self.client.add_event_handler(handle_new_message, events.NewMessage(incoming=True))
+
+        # Start the client
+        # In a real deployment, we might need to handle authentication differently
+        # e.g., using a bot token or a pre-existing session file.
+        # For user accounts, interactive login is tricky in headless environments.
+        # Assuming the session file 'sessions/bot_session.session' is valid or we can interactive login once.
         await self.client.start()
-        print("Telegram client started!")
+        logger.info("Telegram client started and listening for messages!")
 
     async def stop(self):
         if self.client:
             await self.client.disconnect()
-            print("Telegram client stopped.")
+            logger.info("Telegram client stopped.")
 
     async def send_message(self, chat_id: str, message: str):
         if not self.client:
-             print("Telegram client not initialized.")
+             logger.error("Telegram client not initialized.")
              return
         
         try:
@@ -40,6 +55,6 @@ class TelegramService:
                  
             await self.client.send_message(entity, message)
         except Exception as e:
-            print(f"Error sending message to {chat_id}: {e}")
+            logger.error(f"Error sending message to {chat_id}: {e}")
 
 telegram_service = TelegramService()
