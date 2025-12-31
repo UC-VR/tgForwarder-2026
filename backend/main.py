@@ -1,22 +1,39 @@
+import asyncio
+import logging
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from backend.database import init_db
 from backend.telegram.client import telegram_service
 from backend.routes import rules
 
+logger = logging.getLogger(__name__)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup:
     await init_db()
-    # Start Telegram client in the background (non-blocking if properly managed, 
-    # but telethon's start() can be awaited. However, we might want to do this carefully 
-    # as it might require user interaction for login if not bot)
-    # For a bot token it's usually instant.
-    await telegram_service.start()
+
+    # Start Telegram client in the background to avoid blocking server startup
+    # This is important if authentication requires user interaction or takes time.
+    async def start_telegram():
+        try:
+            await telegram_service.start()
+        except Exception as e:
+            logger.error(f"Failed to start Telegram client: {e}")
+
+    # Keep a reference to the task to prevent garbage collection
+    telegram_task = asyncio.create_task(start_telegram())
     
     yield
     
     # Shutdown:
+    if not telegram_task.done():
+        telegram_task.cancel()
+        try:
+            await telegram_task
+        except asyncio.CancelledError:
+            pass
+
     await telegram_service.stop()
 
 app = FastAPI(title="tgForwarder-2026 API", lifespan=lifespan)
