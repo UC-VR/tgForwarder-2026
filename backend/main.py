@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import os
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from backend.database import init_db
 from backend.telegram.client import telegram_service
@@ -37,6 +39,25 @@ async def lifespan(app: FastAPI):
     await telegram_service.stop()
 
 app = FastAPI(title="tgForwarder-2026 API", lifespan=lifespan)
+
+# CORS Configuration
+origins = [
+    "http://localhost:5173",  # Local Frontend
+    "http://localhost:4173",  # Local Preview
+]
+
+# Add Render frontend URL if available or allow all for simplicity in this template
+# In production, it is safer to specify the exact domain
+if os.getenv("RENDER_EXTERNAL_URL"):
+    origins.append(os.getenv("RENDER_EXTERNAL_URL"))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allowing all for now to simplify deployment debugging. Can be restricted later.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(rules.router)
 
