@@ -5,10 +5,11 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+    const port = parseInt(process.env.PORT || '3005');
 
     return {
       server: {
-        port: 3000,
+        port: port,
         host: '0.0.0.0',
         proxy: {
             '/rules': {
