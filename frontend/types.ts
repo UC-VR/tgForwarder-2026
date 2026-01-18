@@ -50,4 +50,4 @@ export interface MessageData {
   timestamp?: string;
 }
 
-export type ViewState = 'dashboard' | 'rules' | 'builder' | 'logs';
+export type ViewState = 'dashboard' | 'rules' | 'builder' | 'logs' | 'settings';

@@ -46,7 +46,12 @@ const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
       </nav>
 
       <div className="p-4 border-t border-slate-800">
-        <button className="flex items-center space-x-3 text-slate-500 hover:text-slate-300 transition-colors w-full px-4 py-2">
+        <button
+          onClick={() => setView('settings' as ViewState)}
+          className={`flex items-center space-x-3 transition-colors w-full px-4 py-2 ${
+            currentView === 'settings' ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
             <Settings size={18} />
             <span className="text-sm">Settings</span>
         </button>

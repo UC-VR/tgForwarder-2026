@@ -7,13 +7,15 @@ import RuleManager from './components/RuleManager';
 import TestBench from './components/TestBench';
 import { ViewState, FilterRule, LogicNode, LogEntry } from './types';
 import { MOCK_LOGS } from './constants';
-import { Save, Bot } from 'lucide-react';
+import { Save, Bot, AlertTriangle, CheckCircle } from 'lucide-react';
 import { api } from './services/api';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [logs] = useState<LogEntry[]>(MOCK_LOGS); // In a real app, this would update live
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Builder State (Temporary state when editing/creating)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
@@ -32,8 +34,10 @@ const App: React.FC = () => {
     try {
       const data = await api.fetchRules();
       setRules(data);
+      setErrorMsg(null);
     } catch (e) {
       console.error("Failed to load rules", e);
+      setErrorMsg(`Failed to connect to backend: ${String(e)}`);
     }
   };
 
@@ -125,6 +129,21 @@ const App: React.FC = () => {
         return <Dashboard logs={logs} rules={rules} />;
       case 'logs':
         return <Dashboard logs={logs} rules={rules} />; // Reuse dashboard or make dedicated log view
+      case 'settings':
+        return (
+          <div className="space-y-6">
+             <h2 className="text-2xl font-bold text-white">Settings</h2>
+             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <p className="text-slate-400">Settings implementation pending backend config API.</p>
+                <div className="mt-4">
+                  <label className="block text-xs text-slate-500 mb-2 uppercase font-bold tracking-wider">Backend URL</label>
+                  <code className="bg-slate-950 p-2 rounded text-slate-300 block w-full border border-slate-800">
+                    {import.meta.env.VITE_API_URL || 'Default (Relative)'}
+                  </code>
+                </div>
+             </div>
+          </div>
+        );
       case 'rules':
         return (
           <RuleManager
@@ -270,6 +289,18 @@ const App: React.FC = () => {
 
       <main className="flex-1 ml-64 p-8 relative">
         <div className="max-w-7xl mx-auto">
+           {errorMsg && (
+             <div className="mb-4 bg-red-900/50 border border-red-800 text-red-200 px-4 py-3 rounded flex items-center">
+               <AlertTriangle className="mr-2" size={20} />
+               {errorMsg}
+             </div>
+           )}
+           {successMsg && (
+             <div className="mb-4 bg-green-900/50 border border-green-800 text-green-200 px-4 py-3 rounded flex items-center">
+               <CheckCircle className="mr-2" size={20} />
+               {successMsg}
+             </div>
+           )}
            {renderContent()}
         </div>
       </main>
