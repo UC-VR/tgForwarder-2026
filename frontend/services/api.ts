@@ -1,6 +1,7 @@
 import { FilterRule, LogicNode, AIRuleConfig } from '../types';
 
-const API_BASE = '/rules';
+const BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE = `${BASE_URL}/rules`;
 
 interface BackendRule {
     id: number;
