@@ -1,9 +1,11 @@
 import re
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import Rule
+
+logger = logging.getLogger(__name__)
 
 class RuleEngine:
     @staticmethod
@@ -25,62 +27,127 @@ class RuleEngine:
 
         matching_rules = []
 
-        # 2. Evaluate filters in memory (for now, simpler than complex SQL JSON queries)
+        # 2. Evaluate filters logic tree
         for rule in rules:
-            if RuleEngine.matches_filters(rule.filters, message_text):
-                matching_rules.append(rule)
+            try:
+                if RuleEngine.evaluate_logic_node(rule.filters, message_text):
+                    matching_rules.append(rule)
+            except Exception as e:
+                logger.error(f"Error evaluating rule {rule.id}: {e}")
+                # Should we fail open or closed? Closed (don't match) seems safer.
         
         return matching_rules
 
     @staticmethod
-    def matches_filters(filters: Optional[dict], message_text: str) -> bool:
+    def evaluate_logic_node(node: Optional[Dict[str, Any]], text: str) -> bool:
         """
-        Check if message text matches the rule's filters.
-        If no filters, it matches.
+        Recursively evaluate a LogicNode against the message text.
         """
-        if not filters:
+        # If no filters are defined, the rule applies to all messages.
+        if not node:
             return True
-        
-        # Pre-calculate lower case message once if needed for keyword/blacklist checks
-        # We do this lazily or just check if keywords/blacklist exist.
-        message_lower = None
 
-        # Example filter: {"keywords": ["urgent", "alert"]}
-        # Match if ANY keyword is present
+        # Check if this is a LogicNode (has 'type') or legacy/simple dict
+        if "type" not in node:
+            # Fallback for simple dict filters (if any exist) or treat as match if empty
+            if not node:
+                return True
+            # If it has keys like "keywords", treat as legacy
+            if "keywords" in node or "blacklist" in node or "regex" in node:
+                 return RuleEngine._matches_legacy_filters(node, text)
+            return True
+
+        node_type = node.get("type")
+
+        if node_type == "group":
+            return RuleEngine._evaluate_group(node, text)
+        elif node_type == "condition":
+            return RuleEngine._evaluate_condition(node, text)
+
+        return True
+
+    @staticmethod
+    def _evaluate_group(node: Dict[str, Any], text: str) -> bool:
+        operator = node.get("operator", "AND")
+        children = node.get("children", [])
+
+        # If group has no children, we treat it as True (pass-through)
+        if not children:
+            return True
+
+        results = [RuleEngine.evaluate_logic_node(child, text) for child in children]
+
+        if operator == "AND":
+            return all(results)
+        elif operator == "OR":
+            return any(results)
+
+        return False
+
+    @staticmethod
+    def _evaluate_condition(node: Dict[str, Any], text: str) -> bool:
+        # Currently we primarily filter on message_text.
+        # Future: check node.get("field") (e.g. "sender", "date")
+
+        condition = node.get("condition", "contains")
+        target_value = node.get("value", "")
+
+        # Ensure we have strings
+        text_str = str(text) if text is not None else ""
+        target_str = str(target_value)
+        
+        # Case-insensitive comparison by default
+        text_lower = text_str.lower()
+        target_lower = target_str.lower()
+
+        if condition == "contains":
+            return target_lower in text_lower
+        elif condition == "not_contains":
+            return target_lower not in text_lower
+        elif condition == "equals":
+            return text_lower == target_lower
+        elif condition == "starts_with":
+            return text_lower.startswith(target_lower)
+        elif condition == "ends_with":
+            return text_lower.endswith(target_lower)
+        elif condition == "regex":
+            try:
+                # Regex is usually case-sensitive unless specified, but user expectation might vary.
+                # We'll use case-insensitive matching to be consistent with others.
+                return bool(re.search(target_str, text_str, re.IGNORECASE))
+            except re.error:
+                logger.error(f"Invalid regex pattern: {target_str}")
+                return False
+
+        return False
+
+    @staticmethod
+    def _matches_legacy_filters(filters: dict, message_text: str) -> bool:
+        """
+        Legacy support for simple keyword/blacklist/regex dicts.
+        """
+        message_lower = message_text.lower() if message_text else ""
+
         keywords = filters.get("keywords", [])
         if keywords:
-            if message_lower is None:
-                message_lower = message_text.lower()
-
-            # If keywords is a list, check if any is in text
             if isinstance(keywords, list):
                 if not any(k.lower() in message_lower for k in keywords):
                     return False
-            # If keywords is a string (legacy/simple), check it
             elif isinstance(keywords, str):
                 if keywords.lower() not in message_lower:
                     return False
         
-        # Blacklist logic
         blacklist = filters.get("blacklist", [])
         if blacklist:
-            if message_lower is None:
-                message_lower = message_text.lower()
-
-            # Check if any blacklisted word is in the message
             if any(b.lower() in message_lower for b in blacklist):
                 return False
 
-        # Regex logic
         regex_pattern = filters.get("regex")
         if regex_pattern:
             try:
-                if not re.search(regex_pattern, message_text):
+                if not re.search(regex_pattern, message_text or ""):
                     return False
             except re.error:
-                # Log error or treat as non-match?
-                # For safety, if regex is invalid, we return False (no match)
-                logging.error(f"Invalid regex pattern: {regex_pattern}")
                 return False
 
         return True

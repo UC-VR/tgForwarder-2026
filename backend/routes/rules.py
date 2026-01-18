@@ -93,7 +93,7 @@ async def test_rule(
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
     
-    matches = RuleEngine.matches_filters(rule.filters, request.message_text)
+    matches = RuleEngine.evaluate_logic_node(rule.filters, request.message_text)
     return RuleTestResponse(
         matches=matches,
         rule_id=request.rule_id,
