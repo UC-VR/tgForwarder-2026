@@ -15,7 +15,11 @@ class RuleBase(SQLModel):
     filters: Optional[dict] = Field(
         default=None, 
         sa_column=Column(JSON().with_variant(JSONB, "postgresql"))
-    ) # e.g., {"keywords": ["urgent"]}
+    ) # LogicNode tree
+    ai_config: Optional[dict] = Field(
+        default=None,
+        sa_column=Column(JSON().with_variant(JSONB, "postgresql"))
+    ) # e.g. { "enabled": true, "systemInstruction": "...", "model": "..." }
     delivery_method: str = Field(default=DeliveryMethod.FORWARD.value) # "forward" or "copy"
     is_active: bool = Field(default=True)
 
@@ -37,6 +41,7 @@ class RuleUpdate(SQLModel):
     source: Optional[str] = None
     destination: Optional[str] = None
     filters: Optional[dict] = None
+    ai_config: Optional[dict] = None
     delivery_method: Optional[str] = None
     is_active: Optional[bool] = None
 
